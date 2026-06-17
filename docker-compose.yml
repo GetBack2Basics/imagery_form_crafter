@@ -1,0 +1,14 @@
+services:
+  imagery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - VITE_IMAGERY_MODE=${VITE_IMAGERY_MODE:-open}
+      - VITE_STAC_API_URL=${VITE_STAC_API_URL:-https://earth-search.aws.element84.com/v1}
+      - VITE_LOCAL_RASTER_DIR=${VITE_LOCAL_RASTER_DIR:-/mnt/imagery}
+      - VITE_LOCAL_TILE_URL=${VITE_LOCAL_TILE_URL:-http://localhost:8080/tiles/{z}/{x}/{y}.png}
+    # volumes:
+    #   - ./source-data:/mnt/imagery:ro
