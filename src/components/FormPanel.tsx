@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { useSourceStore } from '../store/useSourceStore';
 import { fetchRecentItems } from '../services/stacService';
@@ -10,7 +10,7 @@ export default function FormPanel() {
   const setTile = useAppStore((s) => s.setTile);
   const setSelectedItem = useAppStore((s) => s.setSelectedItem);
   const activeSource = useSourceStore((s) => s.activeSource);
-  const { stagingSlots } = useSourceStore();
+  const { stagingSlots, setStagingLeft, setStagingRight, clearStaging, swapStagingToComparison } = useSourceStore();
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0],
@@ -19,6 +19,9 @@ export default function FormPanel() {
   const [results, setResults] = useState<StacItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Track which slot is next for auto-fill (left first, then right, then alternates)
+  const nextSlotRef = useRef<'left' | 'right'>('left');
 
   const copyRow = useCallback(() => {
     const row = [
@@ -74,13 +77,51 @@ export default function FormPanel() {
       locationName: item.properties['dea:product_id'] ?? 'Unknown',
       changeFlag: 'N',
     });
+
+    // Auto-slot: fill empty slot or alternate
+    const { left, right } = stagingSlots;
+    if (!left) {
+      setStagingLeft(item);
+      nextSlotRef.current = 'right';
+    } else if (!right) {
+      setStagingRight(item);
+      nextSlotRef.current = 'left';
+    } else {
+      // Both filled, alternate
+      if (nextSlotRef.current === 'left') {
+        setStagingLeft(item);
+        nextSlotRef.current = 'right';
+      } else {
+        setStagingRight(item);
+        nextSlotRef.current = 'left';
+      }
+    }
+  };
+
+  const handleResultDragStart = (e: React.DragEvent, item: StacItem) => {
+    e.dataTransfer.setData('application/json', JSON.stringify(item));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleStagingDrop = (e: React.DragEvent, slot: 'left' | 'right') => {
+    e.preventDefault();
+    try {
+      const item = JSON.parse(e.dataTransfer.getData('application/json')) as StacItem;
+      if (slot === 'left') {
+        setStagingLeft(item);
+        nextSlotRef.current = 'right';
+      } else {
+        setStagingRight(item);
+        nextSlotRef.current = 'left';
+      }
+    } catch {
+      // Ignore invalid drops
+    }
   };
 
   return (
     <div className="h-full w-96 border-l border-white/10 bg-white/5 backdrop-blur-lg p-4 overflow-y-auto">
       <h2 className="mb-4 text-lg font-medium text-white/90">Imagery Search</h2>
-
-      <ComparisonStaging />
 
       <div className="mb-4 space-y-3">
         <div>
@@ -151,14 +192,16 @@ export default function FormPanel() {
               const dt = item.properties.datetime?.split('T')[0] ?? 'Unknown';
               const isLeft = stagingSlots.left?.id === item.id;
               const isRight = stagingSlots.right?.id === item.id;
+              const isInStaging = isLeft || isRight;
               return (
                 <div key={item.id} className="space-y-1">
                   <button
                     onClick={() => selectItem(item)}
-                    className={`w-full text-left rounded border px-2 py-1.5 text-xs transition ${
-                      isLeft || isRight
-                        ? 'border-green-500 bg-green-500/20 text-green-300'
-                        : 'border-white/10 bg-white/5 text-white/80 hover:border-white/20'
+                    onDragStart={(e) => handleResultDragStart(e, item)}
+                    draggable
+                    className={`w-full text-left rounded border px-2 py-1.5 text-xs transition ${isInStaging
+                      ? 'border-green-500 bg-green-500/20 text-green-300 cursor-grab'
+                      : 'border-white/10 bg-white/5 text-white/80 hover:border-white/20 cursor-grab'
                     }`}
                   >
                     <div className="truncate font-mono">{item.id}</div>
@@ -195,6 +238,16 @@ export default function FormPanel() {
           Copy Row
         </button>
       </div>
+
+      {/* Comparison Staging - moved below Selected Tile */}
+      <ComparisonStaging 
+        stagingSlots={stagingSlots}
+        setStagingLeft={setStagingLeft}
+        setStagingRight={setStagingRight}
+        clearStaging={clearStaging}
+        swapStagingToComparison={swapStagingToComparison}
+        onStagingDrop={handleStagingDrop}
+      />
     </div>
   );
 }

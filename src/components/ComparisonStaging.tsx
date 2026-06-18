@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSourceStore } from '../store/useSourceStore';
 import type { StacItem } from '../services/stacService';
 
@@ -6,10 +7,30 @@ interface StagingSlotProps {
   side: 'left' | 'right';
   item: StacItem | null;
   onClear: () => void;
+  onDrop?: (e: React.DragEvent<HTMLDivElement>, slot: 'left' | 'right') => void;
 }
 
-function StagingSlot({ label, side, item, onClear }: StagingSlotProps) {
+function StagingSlot({ label, side, item, onClear, onDrop }: StagingSlotProps) {
   const isOccupied = Boolean(item);
+  const [isDragOver, setDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (onDrop) {
+      onDrop(e, side);
+    }
+  };
 
   return (
     <div
@@ -21,9 +42,15 @@ function StagingSlot({ label, side, item, onClear }: StagingSlotProps) {
           ? 'border-teal-500/60 bg-teal-500/10 shadow-[0_0_20px_rgba(20,184,166,0.3)]'
           : 'border-white/10 bg-white/5 hover:border-white/20'
         }
+        ${isDragOver
+          ? 'border-teal-500 bg-teal-500/20 scale-[1.02]'
+          : ''}
         ${side === 'left' ? 'rounded-r-full' : 'rounded-l-full'}
       `}
       onClick={() => (item ? onClear() : null)}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur text-[10px] uppercase tracking-wider text-white/70">
         {label}
@@ -62,7 +89,14 @@ function StagingSlot({ label, side, item, onClear }: StagingSlotProps) {
   );
 }
 
-export default function ComparisonStaging() {
+export default function ComparisonStaging(props: {
+  stagingSlots: { left: StacItem | null; right: StacItem | null };
+  setStagingLeft: (item: StacItem | null) => void;
+  setStagingRight: (item: StacItem | null) => void;
+  clearStaging: () => void;
+  swapStagingToComparison: () => void;
+  onStagingDrop: (e: React.DragEvent<HTMLDivElement>, slot: 'left' | 'right') => void;
+}) {
   const { stagingSlots, setStagingLeft, setStagingRight, clearStaging, swapStagingToComparison } = useSourceStore();
 
   const slotLeft = () => setStagingLeft(null);
@@ -82,12 +116,14 @@ export default function ComparisonStaging() {
           side="left"
           item={stagingSlots.left}
           onClear={slotLeft}
+          onDrop={props.onStagingDrop}
         />
         <StagingSlot
           label="Overlay (Right)"
           side="right"
           item={stagingSlots.right}
           onClear={slotRight}
+          onDrop={props.onStagingDrop}
         />
       </div>
 
