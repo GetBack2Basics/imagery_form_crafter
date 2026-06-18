@@ -31,6 +31,7 @@ export interface SourceState {
   setLeftScene: (scene: StacItem | null) => void;
   setRightScene: (scene: StacItem | null) => void;
   clearComparison: () => void;
+  swapComparison: () => void;
   setStagingLeft: (scene: StacItem | null) => void;
   setStagingRight: (scene: StacItem | null) => void;
   clearStaging: () => void;

@@ -49,6 +49,18 @@ export const useSourceStore = create<SourceState>()(
       set((_state: SourceState) => ({
         comparisonStack: initialComparisonStack,
       })),
+    swapComparison: () =>
+      set((state: SourceState) => ({
+        comparisonStack: {
+          left: state.comparisonStack.right,
+          right: state.comparisonStack.left,
+        },
+      })),
+    swapStagingToComparison: () =>
+      set((state: SourceState) => ({
+        comparisonStack: { ...state.stagingSlots },
+        stagingSlots: initialStagingSlots,
+      })),
     setStagingLeft: (scene: StacItem | null) =>
       set((state: SourceState) => ({
         stagingSlots: { ...state.stagingSlots, left: scene },
@@ -59,11 +71,6 @@ export const useSourceStore = create<SourceState>()(
       })),
     clearStaging: () =>
       set((_state: SourceState) => ({
-        stagingSlots: initialStagingSlots,
-      })),
-    swapStagingToComparison: () =>
-      set((state: SourceState) => ({
-        comparisonStack: { ...state.stagingSlots },
         stagingSlots: initialStagingSlots,
       })),
   })),

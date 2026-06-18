@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppStore } from '../store';
 import { useSourceStore } from '../store/useSourceStore';
@@ -6,6 +6,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import SwipeSlider from './SwipeSlider';
 import FormCrafterWidget from './FormCrafterWidget';
+import LayerControlPanel from './LayerControlPanel';
 
 interface AnalysisModalProps {
   isOpen: boolean;
@@ -17,8 +18,11 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tile = useAppStore((s) => s.tile);
-  const { comparisonStack } = useSourceStore();
+  const { comparisonStack, swapComparison } = useSourceStore();
   const [swipePosition, setSwipePosition] = useState(50);
+  const [overlayOpacity, setOverlayOpacity] = useState(50);
+  const [basemap, setBasemap] = useState<'dark-matter' | 'satellite' | 'light'>('dark-matter');
+  const [zoom, setZoom] = useState(11);
 
   const comparisonLeft = comparisonStack.left;
   const comparisonRight = comparisonStack.right;
@@ -32,6 +36,12 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
     : 'Unknown';
   const tileId = comparisonLeft?.properties?.['dea:region_code'] ?? comparisonLeft?.id ?? 'Unknown';
 
+  const BASEMAPS = {
+    'dark-matter': 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    'satellite': 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    'light': 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+  };
+
   useEffect(() => {
     if (!containerRef.current || !hasComparison) return;
 
@@ -44,17 +54,20 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
 
     const map = new MapCtor({
       container: containerRef.current,
-      style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+      style: BASEMAPS[basemap],
       center: tile.center ?? [151.2093, -33.8688],
       zoom: tile.bbox ? 11 : 10,
     });
+
+    // Add NavigationControl
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
     let leftImg: HTMLImageElement | null = null;
     let rightImg: HTMLImageElement | null = null;
     let canvas: HTMLCanvasElement | null = null;
     let hasCleanedUp = false;
 
-    const updateComparisonLayers = () => {
+    const injectComparisonLayers = () => {
       if (!hasComparison || !tile.bbox || !map.style) return;
 
       ['comparison-left', 'comparison-right'].forEach((id) => {
@@ -63,14 +76,12 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
       });
 
       if (comparisonLeft?.assets?.thumbnail?.href && comparisonRight?.assets?.thumbnail?.href) {
-        const leftUrl = comparisonLeft.assets.thumbnail.href;
-        const rightUrl = comparisonRight.assets.thumbnail.href;
         const [minx, miny, maxx, maxy] = tile.bbox;
 
         if (!map.getSource('comparison-left')) {
           map.addSource('comparison-left', {
             type: 'image',
-            url: leftUrl,
+            url: comparisonLeft!.assets!.thumbnail!.href,
             coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
           });
           map.addLayer({
@@ -81,7 +92,7 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
           }, 'aoi-bbox-layer');
         } else {
           (map.getSource('comparison-left') as any).updateImage({
-            url: leftUrl,
+            url: comparisonLeft!.assets!.thumbnail!.href,
             coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
           });
         }
@@ -89,24 +100,35 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
         if (!map.getSource('comparison-right')) {
           map.addSource('comparison-right', {
             type: 'image',
-            url: rightUrl,
+            url: comparisonRight!.assets!.thumbnail!.href,
             coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
           });
           map.addLayer({
             id: 'comparison-right',
             type: 'raster',
             source: 'comparison-right',
-            paint: { 'raster-opacity': 1.0 },
+            paint: { 'raster-opacity': overlayOpacity / 100 },
           }, 'comparison-left');
         } else {
           (map.getSource('comparison-right') as any).updateImage({
-            url: rightUrl,
+            url: comparisonRight!.assets!.thumbnail!.href,
             coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
           });
         }
 
         map.setLayoutProperty('comparison-left', 'visibility', 'none');
         map.setLayoutProperty('comparison-right', 'visibility', 'none');
+
+        if (!leftImg) {
+          leftImg = new Image();
+          leftImg.crossOrigin = 'anonymous';
+          leftImg.src = comparisonLeft!.assets!.thumbnail!.href;
+        }
+        if (!rightImg) {
+          rightImg = new Image();
+          rightImg.crossOrigin = 'anonymous';
+          rightImg.src = comparisonRight!.assets!.thumbnail!.href;
+        }
       }
     };
 
@@ -290,7 +312,7 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
         }
       }
 
-      updateComparisonLayers();
+      injectComparisonLayers();
       setupCanvasOverlay();
 
       map.fitBounds(
@@ -302,17 +324,54 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
       );
     });
 
+    map.on('zoom', () => {
+      setZoom(map.getZoom());
+    });
+
     map.on('moveend', setupCanvasOverlay);
     map.on('zoomend', setupCanvasOverlay);
+
+    map.on('styledata', () => {
+      injectComparisonLayers();
+    });
+
+    const updateOverlayOpacity = () => {
+      if (map.getLayer('comparison-right')) {
+        map.setPaintProperty('comparison-right', 'raster-opacity', overlayOpacity / 100);
+      }
+    };
+
+    const handleBasemapChange = (newBasemap: 'dark-matter' | 'satellite' | 'light') => {
+      map.setStyle(BASEMAPS[newBasemap]);
+    };
+
+    const handleBasemapChangeWrapper = useCallback((newBasemap: 'dark-matter' | 'satellite' | 'light') => {
+      handleBasemapChange(newBasemap);
+    }, []);
+
+    useEffect(() => {
+      if (map.loaded()) updateOverlayOpacity();
+    }, [overlayOpacity]);
+
+    useEffect(() => {
+      handleBasemapChangeWrapper(basemap);
+    }, [basemap, handleBasemapChangeWrapper]);
 
     const updateSwipe = () => {
       if (!hasCleanedUp) requestAnimationFrame(setupCanvasOverlay);
     };
 
+    // Re-inject layers on style change (basemap switch)
+    map.on('styledata', () => {
+      if (map.getStyle().version === 8) {
+        injectComparisonLayers();
+      }
+    });
+
     if (map.loaded()) {
-      updateComparisonLayers();
+      injectComparisonLayers();
     } else {
-      map.once('load', updateComparisonLayers);
+      map.once('load', injectComparisonLayers);
     }
 
     const swipeInterval = setInterval(updateSwipe, 100);
@@ -326,16 +385,21 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
         // ignore
       }
     };
-  }, [tile.bbox, tile.center, tile.tileId, swipePosition, hasComparison]);
+  }, [
+    tile.bbox,
+    tile.center,
+    tile.tileId,
+    swipePosition,
+    hasComparison,
+    overlayOpacity,
+    basemap,
+  ]);
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col">
-      {/* Fullscreen backdrop */}
       <div className="absolute inset-0 bg-black/80 backdrop-blur-2xl" onClick={onClose} />
 
-      {/* Modal content - fullscreen */}
       <div className="relative flex-1 flex flex-col z-10">
-        {/* Top header bar */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 pointer-events-none">
           <div className="pointer-events-auto flex items-center gap-4 bg-black/60 backdrop-blur-xl rounded-xl px-4 py-2 border border-teal-500/30">
             <div className="flex items-center gap-2 text-teal-400">
@@ -368,11 +432,20 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
           </button>
         </div>
 
-        {/* Map area - fullscreen */}
         <div className="relative flex-1 min-h-0">
           <div ref={containerRef} className="absolute inset-0" />
           <SwipeSlider position={swipePosition} onPositionChange={setSwipePosition} enabled={true} />
           <FormCrafterWidget />
+          <LayerControlPanel
+            overlayOpacity={overlayOpacity}
+            onOpacityChange={setOverlayOpacity}
+            basemap={basemap}
+            onBasemapChange={setBasemap}
+            zoom={zoom}
+            onSwap={swapComparison}
+            comparisonLeft={comparisonLeft}
+            comparisonRight={comparisonRight}
+          />
         </div>
       </div>
     </div>,
