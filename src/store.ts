@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { StacItem } from './services/stacService';
 
 export interface TileMetadata {
   tileId?: string;
@@ -17,9 +18,11 @@ export interface AppState {
   loading: boolean;
   error: string | null;
   tile: TileMetadata;
+  selectedItem: StacItem | null;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setTile: (tile: TileMetadata) => void;
+  setSelectedItem: (item: StacItem | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -37,7 +40,9 @@ export const useAppStore = create<AppState>((set) => ({
     locationName: 'Sydney Coast',
     changeFlag: 'N',
   },
+  selectedItem: null,
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   setTile: (tile) => set({ tile }),
+  setSelectedItem: (item) => set({ selectedItem: item }),
 }));
