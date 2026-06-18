@@ -1,6 +1,11 @@
-import type { DataSource, SourceState, ComparisonScenes } from './types';
+import type { DataSource, SourceState, ComparisonScenes, StagingSlots } from './types';
 
 const initialComparisonStack: ComparisonScenes = {
+  left: null,
+  right: null,
+};
+
+const initialStagingSlots: StagingSlots = {
   left: null,
   right: null,
 };
@@ -51,7 +56,8 @@ export const withDefaultSource =
       ];
       state.activeSource = state.sources[0];
     }
-    // Ensure comparisonStack is always initialized
+    // Ensure comparisonStack and stagingSlots are always initialized
     state.comparisonStack = state.comparisonStack ?? initialComparisonStack;
+    state.stagingSlots = state.stagingSlots ?? initialStagingSlots;
     return state as SourceState;
   };

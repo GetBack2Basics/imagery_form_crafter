@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { withDefaultSource } from './index';
-import type { DataSource, SourceState, ComparisonScenes } from './types';
+import type { DataSource, SourceState, ComparisonScenes, StagingSlots } from './types';
 import type { StacItem } from '../services/stacService';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -10,11 +10,17 @@ const initialComparisonStack: ComparisonScenes = {
   right: null,
 };
 
+const initialStagingSlots: StagingSlots = {
+  left: null,
+  right: null,
+};
+
 export const useSourceStore = create<SourceState>()(
   withDefaultSource((set) => ({
     sources: [] as DataSource[],
     activeSource: null as DataSource | null,
     comparisonStack: initialComparisonStack,
+    stagingSlots: initialStagingSlots,
     addSource: (source: Omit<DataSource, 'id'>) =>
       set((state: SourceState) => ({
         sources: [...state.sources, { ...source, id: uid() }],
@@ -42,6 +48,23 @@ export const useSourceStore = create<SourceState>()(
     clearComparison: () =>
       set((_state: SourceState) => ({
         comparisonStack: initialComparisonStack,
+      })),
+    setStagingLeft: (scene: StacItem | null) =>
+      set((state: SourceState) => ({
+        stagingSlots: { ...state.stagingSlots, left: scene },
+      })),
+    setStagingRight: (scene: StacItem | null) =>
+      set((state: SourceState) => ({
+        stagingSlots: { ...state.stagingSlots, right: scene },
+      })),
+    clearStaging: () =>
+      set((_state: SourceState) => ({
+        stagingSlots: initialStagingSlots,
+      })),
+    swapStagingToComparison: () =>
+      set((state: SourceState) => ({
+        comparisonStack: { ...state.stagingSlots },
+        stagingSlots: initialStagingSlots,
       })),
   })),
 );

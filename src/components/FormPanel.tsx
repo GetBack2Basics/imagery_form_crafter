@@ -3,13 +3,14 @@ import { useAppStore } from '../store';
 import { useSourceStore } from '../store/useSourceStore';
 import { fetchRecentItems } from '../services/stacService';
 import type { StacItem } from '../services/stacService';
+import ComparisonStaging from './ComparisonStaging';
 
 export default function FormPanel() {
   const tile = useAppStore((s) => s.tile);
   const setTile = useAppStore((s) => s.setTile);
   const setSelectedItem = useAppStore((s) => s.setSelectedItem);
   const activeSource = useSourceStore((s) => s.activeSource);
-  const { comparisonStack, setLeftScene, setRightScene, clearComparison } = useSourceStore();
+  const { stagingSlots } = useSourceStore();
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0],
@@ -79,6 +80,8 @@ export default function FormPanel() {
     <div className="h-full w-96 border-l border-white/10 bg-white/5 backdrop-blur-lg p-4 overflow-y-auto">
       <h2 className="mb-4 text-lg font-medium text-white/90">Imagery Search</h2>
 
+      <ComparisonStaging />
+
       <div className="mb-4 space-y-3">
         <div>
           <label className="block text-xs text-white/60 mb-1">Source: {activeSource?.name ?? 'None'}</label>
@@ -146,8 +149,8 @@ export default function FormPanel() {
           <div className="max-h-60 overflow-y-auto space-y-1">
             {results.map((item) => {
               const dt = item.properties.datetime?.split('T')[0] ?? 'Unknown';
-              const isLeft = comparisonStack.left?.id === item.id;
-              const isRight = comparisonStack.right?.id === item.id;
+              const isLeft = stagingSlots.left?.id === item.id;
+              const isRight = stagingSlots.right?.id === item.id;
               return (
                 <div key={item.id} className="space-y-1">
                   <button
@@ -166,62 +169,10 @@ export default function FormPanel() {
                       </div>
                     )}
                   </button>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLeftScene(item);
-                      }}
-                      disabled={isRight}
-                      className={`flex-1 text-xs py-1 rounded border transition ${
-                        isLeft
-                          ? 'border-lime-500 bg-lime-500/30 text-lime-300'
-                          : isRight
-                          ? 'border-white/5 bg-white/5 text-white/50 cursor-not-allowed'
-                          : 'border-white/10 bg-white/5 text-white/70 hover:border-lime-500/50'
-                      }`}
-                    >
-                      Set Left (Base)
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setRightScene(item);
-                      }}
-                      disabled={isLeft}
-                      className={`flex-1 text-xs py-1 rounded border transition ${
-                        isRight
-                          ? 'border-sky-500 bg-sky-500/30 text-sky-300'
-                          : isLeft
-                          ? 'border-white/5 bg-white/5 text-white/50 cursor-not-allowed'
-                          : 'border-white/10 bg-white/5 text-white/70 hover:border-sky-500/50'
-                      }`}
-                    >
-                      Set Right (Overlay)
-                    </button>
-                  </div>
                 </div>
               );
             })}
           </div>
-        )}
-        {comparisonStack.left && comparisonStack.right && (
-          <div className="mt-3 p-2 rounded bg-green-500/10 border border-green-500/30 text-xs text-green-300">
-            Comparing <span className="font-mono">{comparisonStack.left.properties.datetime?.split('T')[0] ?? 'Date A'}</span> vs <span className="font-mono">{comparisonStack.right.properties.datetime?.split('T')[0] ?? 'Date B'}</span>. Drag slider on map to inspect changes.
-          </div>
-        )}
-        {(!comparisonStack.left || !comparisonStack.right) && (
-          <div className="mt-3 p-2 rounded bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300">
-            Select a second scene to enable comparison swipe.
-          </div>
-        )}
-        {(comparisonStack.left || comparisonStack.right) && (
-          <button
-            onClick={clearComparison}
-            className="mt-2 w-full text-xs py-1 rounded border border-white/10 bg-white/5 text-white/70 hover:border-white/20"
-          >
-            Clear Comparison
-          </button>
         )}
       </div>
 

@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import MapCanvas from './components/MapCanvas';
 import FormPanel from './components/FormPanel';
 import SourceManager from './components/SourceManager';
+import AnalysisModal from './components/AnalysisModal';
 import { useSourceStore } from './store/useSourceStore';
 
 export default function App() {
   const activeSource = useSourceStore((s) => s.activeSource);
+  const { comparisonStack } = useSourceStore();
   const [status, setStatus] = useState('Initializing imagery service...');
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
 
   const verify = useCallback(() => {
     setTimeout(() => setStatus('Imagery source unreachable. Verify network path or credentials.'), 2000);
@@ -17,6 +20,13 @@ export default function App() {
     const t = setTimeout(() => setStatus('Demo mode — public STAC offline in this environment.'), 1500);
     return () => clearTimeout(t);
   }, [verify]);
+
+  // Listen for comparison stack changes to open modal
+  useEffect(() => {
+    if (comparisonStack.left && comparisonStack.right) {
+      setIsAnalysisOpen(true);
+    }
+  }, [comparisonStack]);
 
   const buildDate = useMemo(() => {
     const d = new Date();
@@ -51,6 +61,9 @@ export default function App() {
         <div className="text-sm text-white/70">Timeline Scrubber — <span className="text-white/40">Select imagery date</span></div>
         <div>{buildDate}</div>
       </footer>
+
+      {/* Analysis Modal Portal */}
+      <AnalysisModal isOpen={isAnalysisOpen} onClose={() => setIsAnalysisOpen(false)} />
     </div>
   );
 }
