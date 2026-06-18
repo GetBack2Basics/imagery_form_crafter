@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { type DataSource, useSourceStore } from '../store/useSourceStore';
+import { useSourceStore } from '../store/useSourceStore';
+import type { DataSource } from '../store/types';
 
 export default function SourceManager() {
   const [open, setOpen] = useState(false);
@@ -106,25 +107,35 @@ export default function SourceManager() {
 
           <div className="space-y-2">
             {sources.length === 0 && <div className="text-xs text-white/60">No sources configured. Add an imagery endpoint to begin.</div>}
-            {sources.map((s) => (
-              <div key={s.id} className="flex items-center justify-between rounded border border-white/10 bg-white/5 px-2 py-1.5">
-                <div className="mr-2 min-w-0 flex-1">
-                  <div className="truncate text-xs text-white/90">{s.name}</div>
-                  <div className="truncate text-[10px] text-white/60">{s.url}</div>
+            {sources.map((s) => {
+              const isActive = activeSource?.id === s.id;
+              return (
+                <div key={s.id} className={`flex items-center justify-between rounded border border-white/10 px-2 py-1.5 ${isActive ? 'bg-green-500/20 border-green-500/30' : 'bg-white/5'}`}>
+                  <div className="mr-2 min-w-0 flex-1">
+                    <div className="truncate text-xs text-white/90 flex items-center gap-1">
+                      {s.name}
+                      {isActive && <span className="text-[10px] text-green-400">● Active</span>}
+                    </div>
+                    <div className="truncate text-[10px] text-white/60">{s.url}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => test(s)} className="text-[10px] text-white/70 hover:text-white/90">
+                      Validate Connection
+                    </button>
+                    {isActive ? (
+                      <span className="text-[10px] text-green-400">Active</span>
+                    ) : (
+                      <button onClick={() => setActiveSource(s.id)} className="text-[10px] text-white/70 hover:text-white/90">
+                        Use
+                      </button>
+                    )}
+                    <button onClick={() => removeSource(s.id)} className="text-[10px] text-red-300 hover:text-red-200">
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => test(s)} className="text-[10px] text-white/70 hover:text-white/90">
-                    Validate Connection
-                  </button>
-                  <button onClick={() => setActiveSource(s.id)} className="text-[10px] text-white/70 hover:text-white/90">
-                    Use
-                  </button>
-                  <button onClick={() => removeSource(s.id)} className="text-[10px] text-red-300 hover:text-red-200">
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {pendingId && status === 'testing' && <div className="text-[10px] text-white/70">Testing connection…</div>}
             {display && <div className={`text-[10px] ${displayClass}`}>{display}</div>}
           </div>
