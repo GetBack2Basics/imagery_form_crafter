@@ -9,6 +9,8 @@ type LayerControlPanelProps = {
   onSwap: () => void;
   comparisonLeft: { properties: { datetime?: string } } | null;
   comparisonRight: { properties: { datetime?: string } } | null;
+  mode: 'pan' | 'swipe';
+  onModeToggle: () => void;
 };
 
 export default function LayerControlPanel({
@@ -20,6 +22,8 @@ export default function LayerControlPanel({
   onSwap,
   comparisonLeft,
   comparisonRight,
+  mode,
+  onModeToggle,
 }: LayerControlPanelProps) {
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
@@ -81,6 +85,16 @@ export default function LayerControlPanel({
             </svg>
           </div>
         </div>
+
+        {/* Mode toggle: Pan vs Swipe (mutually exclusive) */}
+        <button
+          onClick={onModeToggle}
+          className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${mode === 'pan' ? 'bg-teal-500/30 border-teal-400/50 text-teal-300' : 'bg-sky-500/30 border-sky-400/50 text-sky-300'}`}
+          aria-label="Toggle interaction mode"
+          title="Switch between Pan and Swipe"
+        >
+          Mode: {mode === 'pan' ? 'Pan' : 'Swipe'}
+        </button>
 
         {/* Zoom Indicator */}
         <div className="flex items-center gap-1.5 px-2 bg-white/5 rounded-full border border-white/10">

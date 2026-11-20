@@ -4,9 +4,10 @@ interface SwipeSliderProps {
   position: number; // 0-100
   onPositionChange: (position: number) => void;
   enabled: boolean;
+  onDraggingChange?: (dragging: boolean) => void;
 }
 
-export default function SwipeSlider({ position, onPositionChange, enabled }: SwipeSliderProps) {
+export default function SwipeSlider({ position, onPositionChange, enabled, onDraggingChange }: SwipeSliderProps) {
   const sliderRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -26,6 +27,7 @@ export default function SwipeSlider({ position, onPositionChange, enabled }: Swi
       if (!enabled) return;
       e.preventDefault();
       setIsDragging(true);
+      onDraggingChange?.(true);
       updatePosition(e.clientX);
     },
     [enabled, updatePosition],
@@ -36,6 +38,7 @@ export default function SwipeSlider({ position, onPositionChange, enabled }: Swi
       if (!enabled) return;
       e.preventDefault();
       setIsDragging(true);
+      onDraggingChange?.(true);
       updatePosition(e.touches[0].clientX);
     },
     [enabled, updatePosition],
@@ -48,7 +51,7 @@ export default function SwipeSlider({ position, onPositionChange, enabled }: Swi
     const handleTouchMove = (e: TouchEvent) => {
       if (isDragging) updatePosition(e.touches[0].clientX);
     };
-    const handleMouseUp = () => setIsDragging(false);
+    const handleMouseUp = () => { setIsDragging(false); onDraggingChange?.(false); };
 
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
@@ -62,7 +65,7 @@ export default function SwipeSlider({ position, onPositionChange, enabled }: Swi
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('touchend', handleMouseUp);
     };
-  }, [isDragging, updatePosition]);
+  }, [isDragging, updatePosition, onDraggingChange]);
 
   if (!enabled) return null;
 
@@ -97,7 +100,7 @@ export default function SwipeSlider({ position, onPositionChange, enabled }: Swi
       {/* Vertical divider line */}
       <div
         ref={handleRef}
-        className="absolute top-0 bottom-0 w-px pointer-events-auto"
+        className="absolute top-0 bottom-0 w-5 pointer-events-auto cursor-ew-resize"
         style={{
           left: `${position}%`,
           transform: 'translateX(-50%)',

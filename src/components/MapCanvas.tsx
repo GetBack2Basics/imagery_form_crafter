@@ -38,6 +38,7 @@ export default function MapCanvas() {
 
     const updateComparisonLayers = () => {
       if (!hasComparison || !tile.bbox || !map.style) return;
+      if (!map.loaded()) return;
 
       ['comparison-left', 'comparison-right'].forEach((id) => {
         if (map.getLayer(id)) map.removeLayer(id);
@@ -49,18 +50,21 @@ export default function MapCanvas() {
         const rightUrl = comparisonRight.assets.thumbnail.href;
         const [minx, miny, maxx, maxy] = tile.bbox;
 
+        const beforeLeft = map.getLayer('aoi-bbox-layer') ? 'aoi-bbox-layer' : undefined;
         if (!map.getSource('comparison-left')) {
           map.addSource('comparison-left', {
             type: 'image',
             url: leftUrl,
             coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
           });
-          map.addLayer({
+          const lLayer: any = {
             id: 'comparison-left',
             type: 'raster',
             source: 'comparison-left',
             paint: { 'raster-opacity': 1.0 },
-          }, 'aoi-bbox-layer');
+          };
+          if (beforeLeft) map.addLayer(lLayer, beforeLeft);
+          else map.addLayer(lLayer);
         } else {
           (map.getSource('comparison-left') as any).updateImage({
             url: leftUrl,
@@ -68,18 +72,21 @@ export default function MapCanvas() {
           });
         }
 
+        const beforeRight = map.getLayer('comparison-left') ? 'comparison-left' : undefined;
         if (!map.getSource('comparison-right')) {
           map.addSource('comparison-right', {
             type: 'image',
             url: rightUrl,
             coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
           });
-          map.addLayer({
+          const rLayer: any = {
             id: 'comparison-right',
             type: 'raster',
             source: 'comparison-right',
             paint: { 'raster-opacity': 1.0 },
-          }, 'comparison-left');
+          };
+          if (beforeRight) map.addLayer(rLayer, beforeRight);
+          else map.addLayer(rLayer);
         } else {
           (map.getSource('comparison-right') as any).updateImage({
             url: rightUrl,
@@ -88,8 +95,8 @@ export default function MapCanvas() {
         }
 
         // Hide the default image layers - we'll render via canvas
-        map.setLayoutProperty('comparison-left', 'visibility', 'none');
-        map.setLayoutProperty('comparison-right', 'visibility', 'none');
+        if (map.getLayer('comparison-left')) map.setLayoutProperty('comparison-left', 'visibility', 'none');
+        if (map.getLayer('comparison-right')) map.setLayoutProperty('comparison-right', 'visibility', 'none');
       }
     };
 
@@ -125,11 +132,13 @@ export default function MapCanvas() {
       if (!leftImg) {
         leftImg = new Image();
         leftImg.crossOrigin = 'anonymous';
+        leftImg.onload = () => { if (!hasCleanedUp) setupCanvasOverlay(); };
         leftImg.src = comparisonLeft!.assets!.thumbnail!.href;
       }
       if (!rightImg) {
         rightImg = new Image();
         rightImg.crossOrigin = 'anonymous';
+        rightImg.onload = () => { if (!hasCleanedUp) setupCanvasOverlay(); };
         rightImg.src = comparisonRight!.assets!.thumbnail!.href;
       }
 
@@ -311,8 +320,12 @@ export default function MapCanvas() {
 
     if (map.loaded()) {
       updateComparisonLayers();
+      setupCanvasOverlay();
     } else {
-      map.once('load', updateComparisonLayers);
+      map.once('load', () => {
+        updateComparisonLayers();
+        setupCanvasOverlay();
+      });
     }
 
     const swipeInterval = setInterval(updateSwipe, 100);

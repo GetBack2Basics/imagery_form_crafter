@@ -1,13 +1,26 @@
+import { useState } from 'react';
 import { useAppStore } from '../store';
 import { useSourceStore } from '../store/useSourceStore';
 
-export default function FormCrafterWidget() {
+export default function FormCrafterWidget({ onClose }: { onClose?: () => void } = {}) {
   const { comparisonStack } = useSourceStore();
   const { tile } = useAppStore();
+  const [visible, setVisible] = useState(true);
 
   const { left, right } = comparisonStack;
 
   if (!left || !right) return null;
+
+  if (!visible) {
+    return (
+      <button
+        onClick={() => setVisible(true)}
+        className="fixed bottom-4 right-4 z-30 px-3 py-1.5 rounded-lg bg-teal-500/80 text-white text-xs hover:bg-teal-500 transition"
+      >
+        Show Form Crafter
+      </button>
+    );
+  }
 
   const leftDate = left.properties.datetime
     ? new Date(left.properties.datetime).toISOString().split('T')[0]
@@ -33,7 +46,7 @@ export default function FormCrafterWidget() {
             Form Crafter
           </h3>
           <button
-            onClick={() => {}}
+            onClick={() => { setVisible(false); onClose?.(); }}
             className="text-white/50 hover:text-white/80 transition p-1 rounded"
             aria-label="Close"
           >

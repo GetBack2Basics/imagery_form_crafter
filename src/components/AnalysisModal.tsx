@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppStore } from '../store';
 import { useSourceStore } from '../store/useSourceStore';
@@ -20,6 +20,14 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
   const tile = useAppStore((s) => s.tile);
   const { comparisonStack, swapComparison } = useSourceStore();
   const [swipePosition, setSwipePosition] = useState(50);
+  const swipePositionRef = useRef(swipePosition);
+  useEffect(() => { swipePositionRef.current = swipePosition; }, [swipePosition]);
+  const [sliderDragging, setSliderDragging] = useState(false);
+  const [mapDragging, setMapDragging] = useState(false);
+  const [mode, setMode] = useState<'pan' | 'swipe'>('pan');
+  const panEnabled = mode === 'pan';
+  const swipeEnabled = mode === 'swipe';
+  const mapRef = useRef<maplibregl.Map | null>(null);
   const [overlayOpacity, setOverlayOpacity] = useState(50);
   const [basemap, setBasemap] = useState<'dark-matter' | 'satellite' | 'light'>('dark-matter');
   const [zoom, setZoom] = useState(11);
@@ -58,9 +66,20 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
       center: tile.center ?? [151.2093, -33.8688],
       zoom: tile.bbox ? 11 : 10,
     });
+    mapRef.current = map;
 
     // Add NavigationControl
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+    // Ensure the map picks up the container size (modal layout may not be resolved at creation)
+    requestAnimationFrame(() => {
+      try { map.resize(); } catch (e) { /* ignore */ }
+    });
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      ro = new ResizeObserver(() => { try { map.resize(); } catch (e) { /* ignore */ } });
+      ro.observe(containerRef.current);
+    }
 
     let leftImg: HTMLImageElement | null = null;
     let rightImg: HTMLImageElement | null = null;
@@ -69,6 +88,7 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
 
     const injectComparisonLayers = () => {
       if (!hasComparison || !tile.bbox || !map.style) return;
+      if (!map.loaded()) return;
 
       ['comparison-left', 'comparison-right'].forEach((id) => {
         if (map.getLayer(id)) map.removeLayer(id);
@@ -76,57 +96,70 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
       });
 
       if (comparisonLeft?.assets?.thumbnail?.href && comparisonRight?.assets?.thumbnail?.href) {
-        const [minx, miny, maxx, maxy] = tile.bbox;
+        const leftBbox: [number, number, number, number] = (comparisonLeft.bbox as [number, number, number, number]) ?? tile.bbox!;
+        const rightBbox: [number, number, number, number] = (comparisonRight.bbox as [number, number, number, number]) ?? tile.bbox!;
 
+        const beforeLeft = map.getLayer('aoi-bbox-layer') ? 'aoi-bbox-layer' : undefined;
+
+        const [lminx, lminy, lmaxx, lmaxy] = leftBbox;
         if (!map.getSource('comparison-left')) {
           map.addSource('comparison-left', {
             type: 'image',
             url: comparisonLeft!.assets!.thumbnail!.href,
-            coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
+            coordinates: [[lminx, lmaxy], [lmaxx, lmaxy], [lmaxx, lminy], [lminx, lminy]],
           });
-          map.addLayer({
+          const layerLeft: any = {
             id: 'comparison-left',
             type: 'raster',
             source: 'comparison-left',
             paint: { 'raster-opacity': 1.0 },
-          }, 'aoi-bbox-layer');
+          };
+          if (beforeLeft) map.addLayer(layerLeft, beforeLeft);
+          else map.addLayer(layerLeft);
         } else {
           (map.getSource('comparison-left') as any).updateImage({
             url: comparisonLeft!.assets!.thumbnail!.href,
-            coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
+            coordinates: [[lminx, lmaxy], [lmaxx, lmaxy], [lmaxx, lminy], [lminx, lminy]],
           });
         }
+
+        const beforeRight = map.getLayer('comparison-left') ? 'comparison-left' : undefined;
+        const [rminx, rminy, rmaxx, rmaxy] = rightBbox;
 
         if (!map.getSource('comparison-right')) {
           map.addSource('comparison-right', {
             type: 'image',
             url: comparisonRight!.assets!.thumbnail!.href,
-            coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
+            coordinates: [[rminx, rmaxy], [rmaxx, rmaxy], [rmaxx, rminy], [rminx, rminy]],
           });
-          map.addLayer({
+          const layerRight: any = {
             id: 'comparison-right',
             type: 'raster',
             source: 'comparison-right',
             paint: { 'raster-opacity': overlayOpacity / 100 },
-          }, 'comparison-left');
+          };
+          if (beforeRight) map.addLayer(layerRight, beforeRight);
+          else map.addLayer(layerRight);
         } else {
           (map.getSource('comparison-right') as any).updateImage({
             url: comparisonRight!.assets!.thumbnail!.href,
-            coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
+            coordinates: [[rminx, rmaxy], [rmaxx, rmaxy], [rmaxx, rminy], [rminx, rminy]],
           });
         }
 
-        map.setLayoutProperty('comparison-left', 'visibility', 'none');
-        map.setLayoutProperty('comparison-right', 'visibility', 'none');
+        if (map.getLayer('comparison-left')) map.setLayoutProperty('comparison-left', 'visibility', 'none');
+        if (map.getLayer('comparison-right')) map.setLayoutProperty('comparison-right', 'visibility', 'none');
 
         if (!leftImg) {
           leftImg = new Image();
           leftImg.crossOrigin = 'anonymous';
+          leftImg.onload = () => { if (!hasCleanedUp) setupCanvasOverlay(); };
           leftImg.src = comparisonLeft!.assets!.thumbnail!.href;
         }
         if (!rightImg) {
           rightImg = new Image();
           rightImg.crossOrigin = 'anonymous';
+          rightImg.onload = () => { if (!hasCleanedUp) setupCanvasOverlay(); };
           rightImg.src = comparisonRight!.assets!.thumbnail!.href;
         }
       }
@@ -195,19 +228,25 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
         const ctx = canvasEl.getContext('2d');
         if (!ctx) return;
 
-        const [minx, miny, maxx, maxy] = tile.bbox!;
+        const leftBbox: [number, number, number, number] = (comparisonLeft?.bbox as [number, number, number, number]) ?? tile.bbox!;
+        const rightBbox: [number, number, number, number] = (comparisonRight?.bbox as [number, number, number, number]) ?? tile.bbox!;
 
         const project = (lng: number, lat: number) => {
           const point = map.project([lng, lat]);
           return { x: point.x, y: point.y };
         };
 
-        const tl = project(minx, maxy);
-        const tr = project(maxx, maxy);
-        const br = project(maxx, miny);
-        const bl = project(minx, miny);
+        const leftTl = project(leftBbox[0], leftBbox[3]);
+        const leftTr = project(leftBbox[2], leftBbox[3]);
+        const leftBr = project(leftBbox[2], leftBbox[1]);
+        const leftBl = project(leftBbox[0], leftBbox[1]);
 
-        const swipeX = width * (swipePosition / 100);
+        const rightTl = project(rightBbox[0], rightBbox[3]);
+        const rightTr = project(rightBbox[2], rightBbox[3]);
+        const rightBr = project(rightBbox[2], rightBbox[1]);
+        const rightBl = project(rightBbox[0], rightBbox[1]);
+
+        const swipeX = width * (swipePositionRef.current / 100);
 
         ctx.clearRect(0, 0, width, height);
 
@@ -255,8 +294,8 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
           ctx.restore();
         };
 
-        drawQuad(leftImg!, tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y);
-        drawQuad(rightImg!, tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y, swipeX, 'right');
+        drawQuad(leftImg!, leftTl.x, leftTl.y, leftTr.x, leftTr.y, leftBr.x, leftBr.y, leftBl.x, leftBl.y);
+        drawQuad(rightImg!, rightTl.x, rightTl.y, rightTr.x, rightTr.y, rightBr.x, rightBr.y, rightBl.x, rightBl.y, swipeX, 'right');
       };
 
       render();
@@ -315,10 +354,16 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
       injectComparisonLayers();
       setupCanvasOverlay();
 
+      const fitBbox: [number, number, number, number] = [
+        Math.min(comparisonLeft?.bbox?.[0] ?? tile.bbox![0], comparisonRight?.bbox?.[0] ?? tile.bbox![0], tile.bbox![0]),
+        Math.min(comparisonLeft?.bbox?.[1] ?? tile.bbox![1], comparisonRight?.bbox?.[1] ?? tile.bbox![1], tile.bbox![1]),
+        Math.max(comparisonLeft?.bbox?.[2] ?? tile.bbox![2], comparisonRight?.bbox?.[2] ?? tile.bbox![2], tile.bbox![2]),
+        Math.max(comparisonLeft?.bbox?.[3] ?? tile.bbox![3], comparisonRight?.bbox?.[3] ?? tile.bbox![3], tile.bbox![3]),
+      ];
       map.fitBounds(
         [
-          [tile.bbox![0], tile.bbox![1]],
-          [tile.bbox![2], tile.bbox![3]],
+          [fitBbox[0], fitBbox[1]],
+          [fitBbox[2], fitBbox[3]],
         ],
         { padding: 20, maxZoom: 13, duration: 500 },
       );
@@ -327,6 +372,8 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
     map.on('zoom', () => {
       setZoom(map.getZoom());
     });
+    map.on('dragstart', () => setMapDragging(true));
+    map.on('dragend', () => setMapDragging(false));
 
     map.on('moveend', setupCanvasOverlay);
     map.on('zoomend', setupCanvasOverlay);
@@ -334,28 +381,6 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
     map.on('styledata', () => {
       injectComparisonLayers();
     });
-
-    const updateOverlayOpacity = () => {
-      if (map.getLayer('comparison-right')) {
-        map.setPaintProperty('comparison-right', 'raster-opacity', overlayOpacity / 100);
-      }
-    };
-
-    const handleBasemapChange = (newBasemap: 'dark-matter' | 'satellite' | 'light') => {
-      map.setStyle(BASEMAPS[newBasemap]);
-    };
-
-    const handleBasemapChangeWrapper = useCallback((newBasemap: 'dark-matter' | 'satellite' | 'light') => {
-      handleBasemapChange(newBasemap);
-    }, []);
-
-    useEffect(() => {
-      if (map.loaded()) updateOverlayOpacity();
-    }, [overlayOpacity]);
-
-    useEffect(() => {
-      handleBasemapChangeWrapper(basemap);
-    }, [basemap, handleBasemapChangeWrapper]);
 
     const updateSwipe = () => {
       if (!hasCleanedUp) requestAnimationFrame(setupCanvasOverlay);
@@ -370,15 +395,31 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
 
     if (map.loaded()) {
       injectComparisonLayers();
+      setupCanvasOverlay();
     } else {
-      map.once('load', injectComparisonLayers);
+      map.once('load', () => {
+        injectComparisonLayers();
+        setupCanvasOverlay();
+      });
     }
 
     const swipeInterval = setInterval(updateSwipe, 100);
 
+    // Fallback: some browsers never fire 'load' for late-mounted maps; poll for it
+    const loadCheckInterval = setInterval(() => {
+      if (hasCleanedUp) { clearInterval(loadCheckInterval); return; }
+      if (map.loaded()) {
+        clearInterval(loadCheckInterval);
+        injectComparisonLayers();
+        setupCanvasOverlay();
+      }
+    }, 200);
+
     return () => {
       hasCleanedUp = true;
+      if (ro) { try { ro.disconnect(); } catch (e) { /* ignore */ } }
       clearInterval(swipeInterval);
+      clearInterval(loadCheckInterval);
       try {
         map.remove();
       } catch (err) {
@@ -389,11 +430,20 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
     tile.bbox,
     tile.center,
     tile.tileId,
-    swipePosition,
     hasComparison,
     overlayOpacity,
     basemap,
+    comparisonLeft?.id,
+    comparisonRight?.id,
   ]);
+
+  // Mutual exclusion + manual toggle: disable map panning while the slider is being dragged or pan is turned off
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m) return;
+    if (!panEnabled || sliderDragging) m.dragPan.disable();
+    else m.dragPan.enable();
+  }, [panEnabled, sliderDragging]);
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col">
@@ -432,9 +482,9 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
           </button>
         </div>
 
-        <div className="relative flex-1 min-h-0">
-          <div ref={containerRef} className="absolute inset-0" />
-          <SwipeSlider position={swipePosition} onPositionChange={setSwipePosition} enabled={true} />
+        <div className="relative w-full h-full" style={{ minHeight: '500px' }}>
+          <div ref={containerRef} style={{ width: '100%', height: '500px' }} />
+          <SwipeSlider position={swipePosition} onPositionChange={setSwipePosition} enabled={swipeEnabled && !mapDragging} onDraggingChange={setSliderDragging} />
           <FormCrafterWidget />
           <LayerControlPanel
             overlayOpacity={overlayOpacity}
@@ -445,6 +495,8 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
             onSwap={swapComparison}
             comparisonLeft={comparisonLeft}
             comparisonRight={comparisonRight}
+            mode={mode}
+            onModeToggle={() => setMode((m) => (m === 'pan' ? 'swipe' : 'pan'))}
           />
         </div>
       </div>

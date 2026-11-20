@@ -78,8 +78,9 @@ export default function FormPanel() {
       changeFlag: 'N',
     });
 
-    // Auto-slot: fill empty slot or alternate
-    const { left, right } = stagingSlots;
+    // Auto-slot: fill empty slot or alternate (read live store state to avoid stale closures)
+    const liveSlots = useSourceStore.getState().stagingSlots;
+    const { left, right } = liveSlots;
     if (!left) {
       setStagingLeft(item);
       nextSlotRef.current = 'right';
