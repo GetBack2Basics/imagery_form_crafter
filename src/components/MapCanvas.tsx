@@ -8,6 +8,7 @@ import SwipeSlider from './SwipeSlider';
 export default function MapCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tile = useAppStore((s) => s.tile);
+  const selectedItem = useAppStore((s) => s.selectedItem);
   const { comparisonStack } = useSourceStore();
   const [swipePosition, setSwipePosition] = useState(50);
 
@@ -237,8 +238,8 @@ export default function MapCanvas() {
     };
 
     map.on('load', () => {
-      // Add AOI bbox
-      if (tile.bbox) {
+      // Add AOI bbox (only when explicitly enabled)
+      if (tile.bbox && tile.showAoiBbox !== false) {
         if (map.getSource('aoi-bbox')) {
           (map.getSource('aoi-bbox') as any).setData({
             type: 'Feature',
@@ -290,6 +291,32 @@ export default function MapCanvas() {
       updateComparisonLayers();
 
       // Create canvas overlay for swipe
+      // Render a single selected image when not in comparison mode
+      if (!hasComparison && selectedItem?.assets?.thumbnail?.href && selectedItem.bbox) {
+        const [minx, miny, maxx, maxy] = selectedItem.bbox;
+        if (map.getSource('single-image')) {
+          (map.getSource('single-image') as any).updateImage({
+            url: selectedItem.assets.thumbnail.href,
+            coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
+          });
+        } else {
+          map.addSource('single-image', {
+            type: 'image',
+            url: selectedItem.assets.thumbnail.href,
+            coordinates: [[minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]],
+          });
+          map.addLayer({
+            id: 'single-image',
+            type: 'raster',
+            source: 'single-image',
+            paint: { 'raster-opacity': 1.0 },
+          });
+        }
+      } else {
+        if (map.getLayer('single-image')) map.removeLayer('single-image');
+        if (map.getSource('single-image')) map.removeSource('single-image');
+      }
+
       if (hasComparison && tile.bbox) {
         const canvas = document.createElement('canvas');
         canvas.className = 'swipe-canvas absolute inset-0 pointer-events-none z-10';
@@ -301,13 +328,16 @@ export default function MapCanvas() {
         containerRef.current?.appendChild(canvas);
       }
 
-      map.fitBounds(
-        [
-          [tile.bbox![0], tile.bbox![1]],
-          [tile.bbox![2], tile.bbox![3]],
-        ],
-        { padding: 20, maxZoom: 13, duration: 500 },
-      );
+      const fitBbox = (!hasComparison && selectedItem?.bbox) ? selectedItem.bbox : tile.bbox;
+      if (fitBbox) {
+        map.fitBounds(
+          [
+            [fitBbox[0], fitBbox[1]],
+            [fitBbox[2], fitBbox[3]],
+          ],
+          { padding: 20, maxZoom: 13, duration: 500 },
+        );
+      }
     });
 
     // Update canvas on map move/zoom/swipe
@@ -347,6 +377,7 @@ export default function MapCanvas() {
     comparisonRight?.id,
     swipePosition,
     hasComparison,
+    selectedItem?.id,
   ]);
 
   return (

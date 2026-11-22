@@ -76,9 +76,14 @@ export default function FormPanel() {
       projection: 'WGS84',
       locationName: item.properties['dea:product_id'] ?? 'Unknown',
       changeFlag: 'N',
+      showAoiBbox: false,
     });
+  };
 
-    // Auto-slot: fill empty slot or alternate (read live store state to avoid stale closures)
+  // Tick button: include the selected image in the comparison/analysis view
+  const includeInComparison = useCallback(() => {
+    const item = useAppStore.getState().selectedItem;
+    if (!item) return;
     const liveSlots = useSourceStore.getState().stagingSlots;
     const { left, right } = liveSlots;
     if (!left) {
@@ -88,7 +93,6 @@ export default function FormPanel() {
       setStagingRight(item);
       nextSlotRef.current = 'left';
     } else {
-      // Both filled, alternate
       if (nextSlotRef.current === 'left') {
         setStagingLeft(item);
         nextSlotRef.current = 'right';
@@ -97,7 +101,7 @@ export default function FormPanel() {
         nextSlotRef.current = 'left';
       }
     }
-  };
+  }, []);
 
   const handleResultDragStart = (e: React.DragEvent, item: StacItem) => {
     e.dataTransfer.setData('application/json', JSON.stringify(item));
@@ -237,6 +241,14 @@ export default function FormPanel() {
           className="mt-3 w-full rounded-md border border-white/20 px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
         >
           Copy Row
+        </button>
+        <button
+          onClick={includeInComparison}
+          disabled={!useAppStore.getState().selectedItem}
+          className="mt-2 w-full rounded-md border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 text-sm text-teal-300 hover:bg-teal-500/20 disabled:opacity-40"
+          title="Include selected image in comparison/analysis view"
+        >
+          ✓ Include in analysis
         </button>
       </div>
 

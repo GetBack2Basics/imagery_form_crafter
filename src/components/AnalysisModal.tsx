@@ -302,7 +302,7 @@ export default function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
     };
 
     map.on('load', () => {
-      if (tile.bbox) {
+      if (tile.bbox && tile.showAoiBbox !== false) {
         if (map.getSource('aoi-bbox')) {
           (map.getSource('aoi-bbox') as any).setData({
             type: 'Feature',

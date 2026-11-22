@@ -12,6 +12,7 @@ export interface TileMetadata {
   projection?: string;
   locationName?: string;
   changeFlag?: 'Y' | 'N';
+  showAoiBbox?: boolean;
 }
 
 export interface AppState {
