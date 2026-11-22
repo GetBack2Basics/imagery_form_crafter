@@ -330,13 +330,17 @@ export default function MapCanvas() {
 
       const fitBbox = (!hasComparison && selectedItem?.bbox) ? selectedItem.bbox : tile.bbox;
       if (fitBbox) {
-        map.fitBounds(
-          [
-            [fitBbox[0], fitBbox[1]],
-            [fitBbox[2], fitBbox[3]],
-          ],
-          { padding: 20, maxZoom: 13, duration: 500 },
-        );
+        const doFit = () => {
+          try { map.resize(); } catch (e) {}
+          map.fitBounds(
+            [
+              [fitBbox[0], fitBbox[1]],
+              [fitBbox[2], fitBbox[3]],
+            ],
+            { padding: 10, maxZoom: 13, duration: 300 },
+          );
+        };
+        requestAnimationFrame(() => requestAnimationFrame(doFit));
       }
     });
 
