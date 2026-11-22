@@ -351,6 +351,8 @@ export default function MapCanvas() {
     if (map.loaded()) {
       updateComparisonLayers();
       setupCanvasOverlay();
+      const fitBbox = (!hasComparison && selectedItem?.bbox) ? selectedItem.bbox : tile.bbox;
+      if (fitBbox) map.fitBounds([[fitBbox[0], fitBbox[1]], [fitBbox[2], fitBbox[3]]], { padding: 20, maxZoom: 13, duration: 500 });
     } else {
       map.once('load', () => {
         updateComparisonLayers();
