@@ -45,7 +45,18 @@ export default function FormPanel() {
         const d = dt.split('T')[0];
         return d >= dateRange.start && d <= dateRange.end;
       });
-      setResults(filtered);
+      // Sort results by extent overlap with the current AOI bbox (largest overlap first)
+      const overlapArea = (a: [number, number, number, number], b: [number, number, number, number]) => {
+        const ix = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]));
+        const iy = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+        return ix * iy;
+      };
+      const sorted = [...filtered].sort((a, b) => {
+        const oa = a.bbox ? overlapArea(a.bbox as [number, number, number, number], bbox) : 0;
+        const ob = b.bbox ? overlapArea(b.bbox as [number, number, number, number], bbox) : 0;
+        return ob - oa;
+      });
+      setResults(sorted);
       if (filtered.length > 0) {
         setSelectedItem(filtered[0]);
       }
