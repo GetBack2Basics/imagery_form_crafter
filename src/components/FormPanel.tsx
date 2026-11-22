@@ -211,23 +211,45 @@ export default function FormPanel() {
               const isInStaging = isLeft || isRight;
               return (
                 <div key={item.id} className="space-y-1">
-                  <button
-                    onClick={() => selectItem(item)}
-                    onDragStart={(e) => handleResultDragStart(e, item)}
-                    draggable
-                    className={`w-full text-left rounded border px-2 py-1.5 text-xs transition ${isInStaging
-                      ? 'border-green-500 bg-green-500/20 text-green-300 cursor-grab'
-                      : 'border-white/10 bg-white/5 text-white/80 hover:border-white/20 cursor-grab'
-                    }`}
-                  >
-                    <div className="truncate font-mono">{item.id}</div>
-                    <div className="truncate text-[10px] text-white/60">{dt}</div>
-                    {item.bbox && (
-                      <div className="truncate text-[10px] text-white/50">
-                        BBox: {item.bbox.map((n) => n.toFixed(2)).join(', ')}
-                      </div>
-                    )}
-                  </button>
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isInStaging}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const { left, right } = useSourceStore.getState().stagingSlots;
+                          if (!left) {
+                            setStagingLeft(item);
+                          } else if (!right) {
+                            setStagingRight(item);
+                          }
+                        } else {
+                          const { left, right } = useSourceStore.getState().stagingSlots;
+                          if (left?.id === item.id) setStagingLeft(null);
+                          if (right?.id === item.id) setStagingRight(null);
+                        }
+                      }}
+                      className="mt-1.5 shrink-0 accent-teal-500"
+                      aria-label={`Include ${item.id} in comparison`}
+                    />
+                    <button
+                      onClick={() => selectItem(item)}
+                      onDragStart={(e) => handleResultDragStart(e, item)}
+                      draggable
+                      className={`flex-1 text-left rounded border px-2 py-1.5 text-xs transition ${isInStaging
+                        ? 'border-green-500 bg-green-500/20 text-green-300 cursor-grab'
+                        : 'border-white/10 bg-white/5 text-white/80 hover:border-white/20 cursor-grab'
+                      }`}
+                    >
+                      <div className="truncate font-mono">{item.id}</div>
+                      <div className="truncate text-[10px] text-white/60">{dt}</div>
+                      {item.bbox && (
+                        <div className="truncate text-[10px] text-white/50">
+                          BBox: {item.bbox.map((n) => n.toFixed(2)).join(', ')}
+                        </div>
+                      )}
+                    </button>
+                  </div>
                 </div>
               );
             })}
